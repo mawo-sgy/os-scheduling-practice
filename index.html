@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OS Process Scheduling Practice</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ══ Site header (credit + title) ══════════════════════════ -->
+<header class="site-header">
+    <div class="site-header-inner">
+
+        <div class="site-brand">
+            <div class="site-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/>
+                    <path d="M8 21h8M12 17v4"/>
+                    <path d="M7 8h4M7 11h2"/>
+                </svg>
+            </div>
+            <div class="site-text">
+                <h1 class="site-title">OS Process Scheduling Practice Tool</h1>
+                <p class="site-subtitle">Built by <strong>Mawo</strong>&ensp;|&ensp;For UMBB CS Students</p>
+                <p class="site-tagline">Practice CPU scheduling algorithms with interactive drag-and-drop</p>
+            </div>
+        </div>
+
+        <button id="reset-btn" class="btn btn-reset">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+            </svg>
+            Reset
+        </button>
+
+    </div>
+</header>
+
+<!-- ══ Top panel (config + palette, always visible) ══════════ -->
+<div class="top-panel">
+
+    <!-- Config card -->
+    <div class="tp-card cfg-card">
+        <div class="tp-card-head">Configuration</div>
+        <div class="tp-card-body cfg-body">
+
+            <div class="ctrl-group">
+                <div class="ctrl-label">CPUs <span class="ctrl-range">1–2</span></div>
+                <div class="spinbox">
+                    <button class="spin" data-for="cfg-cpus" data-d="-1">−</button>
+                    <input id="cfg-cpus" type="number" min="1" max="2" value="1">
+                    <button class="spin" data-for="cfg-cpus" data-d="1">+</button>
+                </div>
+            </div>
+
+            <div class="ctrl-divider"></div>
+
+            <div class="ctrl-group">
+                <div class="ctrl-label">I/O Devices <span class="ctrl-range">1–3</span></div>
+                <div class="spinbox">
+                    <button class="spin" data-for="cfg-io" data-d="-1">−</button>
+                    <input id="cfg-io" type="number" min="1" max="3" value="2">
+                    <button class="spin" data-for="cfg-io" data-d="1">+</button>
+                </div>
+            </div>
+
+            <div class="ctrl-divider"></div>
+
+            <div class="ctrl-group">
+                <div class="ctrl-label">Timeline</div>
+                <div class="spinbox">
+                    <button class="spin spin-wide" data-for="cfg-len" data-d="-5">−5</button>
+                    <input id="cfg-len" type="number" min="5" max="50" value="30">
+                    <button class="spin spin-wide" data-for="cfg-len" data-d="5">+5</button>
+                </div>
+            </div>
+
+            <div class="ctrl-divider"></div>
+
+            <div class="ctrl-group">
+                <div class="ctrl-label">RQ Rows <span class="ctrl-range">4–8</span></div>
+                <div class="spinbox">
+                    <button class="spin" data-for="cfg-rq" data-d="-1">−</button>
+                    <input id="cfg-rq" type="number" min="4" max="8" value="4">
+                    <button class="spin" data-for="cfg-rq" data-d="1">+</button>
+                </div>
+            </div>
+
+            <div class="ctrl-divider"></div>
+
+            <div class="ctrl-group">
+                <div class="ctrl-label">IOQ Rows <span class="ctrl-range">4–8</span></div>
+                <div class="spinbox">
+                    <button class="spin" data-for="cfg-ioq" data-d="-1">−</button>
+                    <input id="cfg-ioq" type="number" min="4" max="8" value="4">
+                    <button class="spin" data-for="cfg-ioq" data-d="1">+</button>
+                </div>
+            </div>
+
+            <button id="apply-btn" class="btn btn-apply">Apply</button>
+        </div>
+    </div>
+
+    <!-- Palette + legend card -->
+    <div class="tp-card pal-card">
+        <div class="tp-card-head">Process Palette</div>
+        <div class="tp-card-body pal-body">
+            <div class="proc-chips" id="palette">
+                <div class="proc p1" draggable="true" data-process="P1">P1</div>
+                <div class="proc p2" draggable="true" data-process="P2">P2</div>
+                <div class="proc p3" draggable="true" data-process="P3">P3</div>
+                <div class="proc p4" draggable="true" data-process="P4">P4</div>
+                <div class="proc p5" draggable="true" data-process="P5">P5</div>
+            </div>
+            <div class="pal-right">
+                <p class="pal-tip">Drag onto any cell &nbsp;·&nbsp; Click placed block to remove &nbsp;·&nbsp; Drag placed block to move</p>
+                <div class="legend">
+                    <div class="leg-item"><span class="leg-pip ioq-pip"></span><span>I/O Queue</span></div>
+                    <div class="leg-item"><span class="leg-pip io-pip"></span><span>I/O Device</span></div>
+                    <div class="leg-item"><span class="leg-pip rq-pip"></span><span>Ready Queue</span></div>
+                    <div class="leg-item"><span class="leg-pip cpu-pip"></span><span>CPU</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div><!-- .top-panel -->
+
+<!-- ══ Grid area (scrollable) ════════════════════════════════ -->
+<div class="grid-area">
+    <div class="grid-scroll" id="grid-scroll">
+        <div class="grid" id="grid">
+            <!-- Rows injected by script.js -->
+        </div>
+    </div>
+</div>
+
+<script src="script.js"></script>
+
+<!-- ══ Site footer ════════════════════════════════════════════ -->
+<footer class="site-footer">
+    <div class="footer-left">
+        <span class="footer-credit">Created by <strong>Mawo</strong> &copy; 2026</span>
+        <span class="footer-sep"></span>
+        <span class="footer-course">Built for Operating Systems (ENG2) exam preparation</span>
+    </div>
+    <div class="footer-right">
+        <span class="footer-share">Found this helpful? Share with your classmates! 🚀</span>
+    </div>
+</footer>
+
+</body>
+</html>
