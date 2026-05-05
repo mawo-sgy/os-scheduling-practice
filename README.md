@@ -26,7 +26,7 @@ An interactive drag-and-drop tool to practice CPU scheduling algorithms for Oper
 
 ## Try it Live
 
-🌐 **[Launch Tool](https://YOUR_USERNAME.github.io/os-scheduling-practice/)**
+🌐 **[Launch Tool](https://mawo-sgy.github.io/os-scheduling-practice/)**
 
 ## Algorithms Supported
 
