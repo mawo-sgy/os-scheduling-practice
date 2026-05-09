@@ -9,12 +9,19 @@ const cfg = {
     len:  30,  // 5–50 (timeline length)
     rq:   4,   // 4–8  (ready-queue rows)
     ioq:  4,   // 4–8  (I/O-queue rows, shared across all devices)
+    names:           ['P1','P2','P3','P4','P5'],
+    namingStyle:     'p-style',
+    customNamesInput: '',
 };
+
+// Process colours — cycled by index so any number of names work
+const PROC_COLORS = ['#3b82f6','#22c55e','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899','#84cc16'];
+function procColor(idx) { return PROC_COLORS[idx % PROC_COLORS.length]; }
 
 // ════════════════════════════════════════════════════════════
 //  Drag state
 // ════════════════════════════════════════════════════════════
-let dragProc = null;   // "P1" … "P5"
+let dragProc = null;
 let dragSrc  = null;   // source .cell element, or null when from palette
 
 // ════════════════════════════════════════════════════════════
@@ -41,39 +48,39 @@ function buildRowDefs() {
         firstSection = false;
     };
 
-    // 1 · I/O Queue (shared across all I/O devices)
+    // 1 · I/O Queue — highest number at top (furthest from devices), 1 at bottom (next in line)
     section(
         Array.from({ length: cfg.ioq }, (_, i) => ({
-            label:  `I/O Queue ${i + 1}`,
+            label:  `I/O Queue ${cfg.ioq - i}`,
             type:   'ioq',
-            colId:  `ioq-${i + 1}`,
+            colId:  `ioq-${cfg.ioq - i}`,
         }))
     );
 
-    // 2 · I/O Devices
+    // 2 · I/O Devices — highest number at top
     section(
         Array.from({ length: cfg.io }, (_, i) => ({
-            label:  `I/O Device ${i + 1}`,
+            label:  `I/O Device ${cfg.io - i}`,
             type:   'io',
-            colId:  `io-${i + 1}`,
+            colId:  `io-${cfg.io - i}`,
         }))
     );
 
-    // 3 · Ready Queue
+    // 3 · Ready Queue — highest number at top (furthest from CPU), 1 at bottom (next to run)
     section(
         Array.from({ length: cfg.rq }, (_, i) => ({
-            label:  `Ready Queue ${i + 1}`,
+            label:  `Ready Queue ${cfg.rq - i}`,
             type:   'rq',
-            colId:  `rq-${i + 1}`,
+            colId:  `rq-${cfg.rq - i}`,
         }))
     );
 
-    // 4 · CPU(s)
+    // 4 · CPU(s) — highest number at top, CPU 1 at bottom (closest to Ready Queue)
     section(
         Array.from({ length: cfg.cpus }, (_, i) => ({
-            label:  cfg.cpus > 1 ? `CPU ${i + 1}` : 'CPU',
+            label:  cfg.cpus > 1 ? `CPU ${cfg.cpus - i}` : 'CPU',
             type:   'cpu',
-            colId:  `cpu-${i + 1}`,
+            colId:  `cpu-${cfg.cpus - i}`,
         }))
     );
 
@@ -94,10 +101,12 @@ function buildGrid() {
         grid.appendChild(rowEl);
     });
 
-    // Time axis — sticky bottom
+    // Time axis — sticky bottom (appended last)
     grid.appendChild(makeTimeRow());
 
     updateMeta();
+    // Measure after paint so scrollWidth is accurate
+    requestAnimationFrame(updateScrollHint);
 }
 
 // ── Single resource row ──────────────────────────────────────
@@ -141,7 +150,7 @@ function makeTimeRow() {
 
     // Corner label
     const corner = mkDiv('row-label time-corner');
-    corner.textContent = 't';
+    corner.textContent = 'Time →';
     row.appendChild(corner);
 
     for (let t = 0; t < cfg.len; t++) {
@@ -228,7 +237,9 @@ function onDrop(e) {
 //  Placed block factory
 // ════════════════════════════════════════════════════════════
 function makePlaced(name) {
-    const div = mkDiv(`placed ${name.toLowerCase()}`);
+    const idx = cfg.names.indexOf(name);
+    const div = mkDiv('placed');
+    div.style.background = procColor(idx >= 0 ? idx : 0);
     div.textContent = name;
     div.dataset.process = name;
     div.draggable = true;
@@ -246,13 +257,66 @@ function makePlaced(name) {
 }
 
 // ════════════════════════════════════════════════════════════
+//  Palette (re)build
+// ════════════════════════════════════════════════════════════
+function rebuildPalette() {
+    const palette = document.getElementById('palette');
+    palette.innerHTML = '';
+    cfg.names.forEach((name, idx) => {
+        const d = mkDiv('proc');
+        d.style.background = procColor(idx);
+        d.textContent = name;
+        d.draggable = true;
+        d.dataset.process = name;
+        d.addEventListener('dragstart', onPalDragStart);
+        d.addEventListener('dragend',   onPlacedDragEnd);
+        palette.appendChild(d);
+    });
+}
+
+// ════════════════════════════════════════════════════════════
 //  Controls
 // ════════════════════════════════════════════════════════════
+function readNamingConfig() {
+    const style = document.querySelector('input[name="naming-style"]:checked').value;
+    if (style === 'p-style') return { style, names: ['P1','P2','P3','P4','P5'], raw: '' };
+    if (style === 'a-style') return { style, names: ['A','B','C','D','E'],       raw: '' };
+
+    const raw = document.getElementById('custom-names').value;
+    const names = raw.split(',')
+        .map(s => s.trim())
+        .filter(s => s.length >= 1 && s.length <= 4);
+
+    if (names.length < 3 || names.length > 8) {
+        showToast('Custom names: enter 3–8 names, each 1–4 characters.');
+        return null;
+    }
+    if (new Set(names).size < names.length) {
+        showToast('Custom names: no duplicates allowed.');
+        return null;
+    }
+    return { style, names, raw };
+}
+
 function applyConfig() {
+    const naming = readNamingConfig();
+    if (!naming) return;   // validation failed — abort
+
     const clamp = (id, lo, hi) => {
         const v = parseInt(document.getElementById(id).value, 10);
         return Math.max(lo, Math.min(hi, isNaN(v) ? lo : v));
     };
+
+    // Snapshot all placed blocks before the grid is wiped
+    const snapshot = [];
+    document.querySelectorAll('.cell').forEach(cell => {
+        const placed = cell.querySelector('.placed');
+        if (placed) snapshot.push({ col: cell.dataset.col, t: +cell.dataset.t, process: placed.dataset.process });
+    });
+
+    cfg.names            = naming.names;
+    cfg.namingStyle      = naming.style;
+    cfg.customNamesInput = naming.raw;
 
     cfg.cpus = clamp('cfg-cpus', 1, 2);
     cfg.io   = clamp('cfg-io',   1, 3);
@@ -267,8 +331,32 @@ function applyConfig() {
     document.getElementById('cfg-rq').value   = cfg.rq;
     document.getElementById('cfg-ioq').value  = cfg.ioq;
 
+    rebuildPalette();
     buildGrid();
+
+    // Restore blocks that still fit; count those that don't
+    let lost = 0;
+    snapshot.forEach(({ col, t, process }) => {
+        const cell = document.querySelector(`.cell[data-col="${col}"][data-t="${t}"]`);
+        if (cell) { cell.innerHTML = ''; cell.appendChild(makePlaced(process)); }
+        else lost++;
+    });
+
+    if (lost > 0) showToast(`${lost} block${lost > 1 ? 's' : ''} removed — outside new grid bounds.`);
+
     saveState();
+}
+
+function showToast(msg) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('toast-show'));
+    setTimeout(() => {
+        t.classList.remove('toast-show');
+        t.addEventListener('transitionend', () => t.remove(), { once: true });
+    }, 3000);
 }
 
 function resetGrid() {
@@ -284,6 +372,20 @@ function updateMeta() {
         `  ·  ${cfg.cpus} CPU` +
         `  ·  ${cfg.io} I/O device${cfg.io > 1 ? 's' : ''}` +
         `  ·  ${cfg.rq} RQ rows  ·  ${cfg.ioq} IOQ rows`;
+}
+
+function updateScrollHint() {
+    const scroll = document.getElementById('grid-scroll');
+    const hint   = document.getElementById('scroll-hint');
+    if (!scroll || !hint) return;
+
+    const atLeft  = scroll.scrollLeft < 2;
+    const atRight = scroll.scrollLeft >= scroll.scrollWidth - scroll.clientWidth - 2;
+    const canScroll = scroll.scrollWidth > scroll.clientWidth + 4;
+
+    hint.classList.toggle('visible', canScroll && !atRight);
+    document.getElementById('scroll-arr-left').style.visibility  = atLeft  ? 'hidden' : 'visible';
+    document.getElementById('scroll-arr-right').style.visibility = atRight ? 'hidden' : 'visible';
 }
 
 // ── Spinbox steppers ─────────────────────────────────────────
@@ -325,6 +427,15 @@ function restoreState(state) {
     document.getElementById('cfg-len').value  = cfg.len;
     document.getElementById('cfg-rq').value   = cfg.rq;
     document.getElementById('cfg-ioq').value  = cfg.ioq;
+
+    // Restore naming UI
+    const radio = document.querySelector(`input[name="naming-style"][value="${cfg.namingStyle || 'p-style'}"]`);
+    if (radio) radio.checked = true;
+    const customInp = document.getElementById('custom-names');
+    customInp.value    = cfg.customNamesInput || '';
+    customInp.disabled = cfg.namingStyle !== 'custom';
+
+    rebuildPalette();
     buildGrid();
     state.blocks.forEach(({ col, t, process }) => {
         const cell = document.querySelector(`.cell[data-col="${col}"][data-t="${t}"]`);
@@ -335,22 +446,71 @@ function restoreState(state) {
 // ════════════════════════════════════════════════════════════
 //  PNG export  (requires html2canvas CDN)
 // ════════════════════════════════════════════════════════════
-function exportPNG() {
-    const target = document.getElementById('grid-scroll');
+async function exportPNG() {
+    const scrollEl = document.getElementById('grid-scroll');
     const btn = document.getElementById('export-btn');
-    btn.textContent = 'Capturing…';
+
+    // Full-screen loading overlay with spinner
+    const overlay = mkDiv('export-overlay');
+    overlay.innerHTML = '<div class="export-spinner"></div><p class="export-msg">Generating image…</p>';
+    document.body.appendChild(overlay);
     btn.disabled = true;
 
-    html2canvas(target, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(canvas => {
-        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const a = document.createElement('a');
-        a.download = `OS_Schedule_${ts}.png`;
-        a.href = canvas.toDataURL('image/png');
-        a.click();
-    }).finally(() => {
-        btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export PNG`;
+    // Two frames: paint overlay, flush layout
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    // ── Neutralise sticky positioning ────────────────────────
+    // html2canvas renders sticky elements at their current stuck screen
+    // position, not their flow position, causing the time row to overlap
+    // the first content row.  Setting position:relative puts every element
+    // back in normal flow for the capture, then we restore in finally.
+    const stickyEls  = Array.from(scrollEl.querySelectorAll('.time-row, .row-label'));
+    const savedPos   = stickyEls.map(el => { const v = el.style.position; el.style.position = 'relative'; return v; });
+
+    // Read full dimensions after neutralising sticky (flow reflows)
+    const fullW = scrollEl.scrollWidth;
+    const fullH = scrollEl.scrollHeight;
+
+    // Lift the CSS overflow clip
+    const origOverflow = scrollEl.style.overflow;
+    scrollEl.style.overflow = 'visible';
+
+    try {
+        const canvas = await html2canvas(scrollEl, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            scrollX: 0,
+            scrollY: 0,
+            width:        fullW,
+            height:       fullH,
+            windowWidth:  fullW,
+            windowHeight: fullH,
+        });
+
+        await new Promise(resolve => {
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                a.download = `OS_Schedule_${ts}.png`;
+                a.href = url;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                resolve();
+            }, 'image/png');
+        });
+    } catch (err) {
+        console.error('Export failed:', err);
+        showToast('Export failed — try a shorter timeline or zoom out.');
+    } finally {
+        // Restore sticky positioning and overflow
+        stickyEls.forEach((el, i) => { el.style.position = savedPos[i]; });
+        scrollEl.style.overflow = origOverflow;
+        document.body.removeChild(overlay);
         btn.disabled = false;
-    });
+    }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -359,15 +519,20 @@ function exportPNG() {
 document.addEventListener('DOMContentLoaded', () => {
     setupSpinners();
 
-    // Wire palette drag events
-    document.querySelectorAll('#palette .proc').forEach(b => {
-        b.addEventListener('dragstart', onPalDragStart);
-        b.addEventListener('dragend',   onPlacedDragEnd);
+    // Naming style radio — enable/disable custom text input
+    document.querySelectorAll('input[name="naming-style"]').forEach(r => {
+        r.addEventListener('change', e => {
+            const inp = document.getElementById('custom-names');
+            inp.disabled = e.target.value !== 'custom';
+            if (!inp.disabled) inp.focus();
+        });
     });
 
     document.getElementById('apply-btn').addEventListener('click', applyConfig);
     document.getElementById('reset-btn').addEventListener('click', resetGrid);
     document.getElementById('export-btn').addEventListener('click', exportPNG);
+
+    document.getElementById('grid-scroll').addEventListener('scroll', updateScrollHint, { passive: true });
 
     // Session restore prompt
     const saved = localStorage.getItem('osScheduleState');
@@ -385,6 +550,7 @@ document.addEventListener('DOMContentLoaded', () => {
             buildGrid();
         });
     } else {
+        rebuildPalette();
         buildGrid();
     }
 });
