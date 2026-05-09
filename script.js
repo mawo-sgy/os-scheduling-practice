@@ -220,6 +220,8 @@ function onDrop(e) {
     cell.innerHTML = '';
     cell.appendChild(makePlaced(dragProc));
     dragProc = null;
+
+    saveState();
 }
 
 // ════════════════════════════════════════════════════════════
@@ -237,6 +239,7 @@ function makePlaced(name) {
     div.addEventListener('click', e => {
         e.stopPropagation();
         div.parentElement.innerHTML = '';
+        saveState();
     });
 
     return div;
@@ -265,10 +268,12 @@ function applyConfig() {
     document.getElementById('cfg-ioq').value  = cfg.ioq;
 
     buildGrid();
+    saveState();
 }
 
 function resetGrid() {
     document.querySelectorAll('.cell').forEach(c => (c.innerHTML = ''));
+    localStorage.removeItem('osScheduleState');
 }
 
 function updateMeta() {
@@ -300,6 +305,55 @@ function mkDiv(cls) {
 }
 
 // ════════════════════════════════════════════════════════════
+//  Session persistence (localStorage)
+// ════════════════════════════════════════════════════════════
+function saveState() {
+    const blocks = [];
+    document.querySelectorAll('.cell').forEach(cell => {
+        const placed = cell.querySelector('.placed');
+        if (placed) {
+            blocks.push({ col: cell.dataset.col, t: cell.dataset.t, process: placed.dataset.process });
+        }
+    });
+    localStorage.setItem('osScheduleState', JSON.stringify({ cfg: { ...cfg }, blocks }));
+}
+
+function restoreState(state) {
+    Object.assign(cfg, state.cfg);
+    document.getElementById('cfg-cpus').value = cfg.cpus;
+    document.getElementById('cfg-io').value   = cfg.io;
+    document.getElementById('cfg-len').value  = cfg.len;
+    document.getElementById('cfg-rq').value   = cfg.rq;
+    document.getElementById('cfg-ioq').value  = cfg.ioq;
+    buildGrid();
+    state.blocks.forEach(({ col, t, process }) => {
+        const cell = document.querySelector(`.cell[data-col="${col}"][data-t="${t}"]`);
+        if (cell) { cell.innerHTML = ''; cell.appendChild(makePlaced(process)); }
+    });
+}
+
+// ════════════════════════════════════════════════════════════
+//  PNG export  (requires html2canvas CDN)
+// ════════════════════════════════════════════════════════════
+function exportPNG() {
+    const target = document.getElementById('grid-scroll');
+    const btn = document.getElementById('export-btn');
+    btn.textContent = 'Capturing…';
+    btn.disabled = true;
+
+    html2canvas(target, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(canvas => {
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const a = document.createElement('a');
+        a.download = `OS_Schedule_${ts}.png`;
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+    }).finally(() => {
+        btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export PNG`;
+        btn.disabled = false;
+    });
+}
+
+// ════════════════════════════════════════════════════════════
 //  Bootstrap
 // ════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
@@ -313,6 +367,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('apply-btn').addEventListener('click', applyConfig);
     document.getElementById('reset-btn').addEventListener('click', resetGrid);
+    document.getElementById('export-btn').addEventListener('click', exportPNG);
 
-    buildGrid();
+    // Session restore prompt
+    const saved = localStorage.getItem('osScheduleState');
+    if (saved) {
+        const banner = document.getElementById('restore-banner');
+        banner.classList.remove('hidden');
+        const parsed = JSON.parse(saved);
+        banner.querySelector('.restore-yes').addEventListener('click', () => {
+            restoreState(parsed);
+            banner.classList.add('hidden');
+        });
+        banner.querySelector('.restore-no').addEventListener('click', () => {
+            localStorage.removeItem('osScheduleState');
+            banner.classList.add('hidden');
+            buildGrid();
+        });
+    } else {
+        buildGrid();
+    }
 });

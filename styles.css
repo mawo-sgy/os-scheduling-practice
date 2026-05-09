@@ -187,6 +187,77 @@ body {
 }
 .btn-apply:hover { background: var(--blue-d); box-shadow: 0 2px 8px rgba(37,99,235,.35); }
 
+.btn-export {
+    background: #16a34a;
+    color: #fff;
+    border: 1px solid #15803d;
+    flex-shrink: 0;
+}
+.btn-export:hover { background: #15803d; box-shadow: 0 2px 8px rgba(22,163,74,.35); }
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════════════════════
+   Session restore banner
+════════════════════════════════════════════════════════════ */
+.restore-banner {
+    flex-shrink: 0;
+    background: #eff6ff;
+    border-bottom: 1px solid #bfdbfe;
+    padding: 7px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: .74rem;
+    color: #1e40af;
+    z-index: 100;
+}
+
+.restore-banner.hidden { display: none; }
+
+.restore-icon { font-size: .95rem; flex-shrink: 0; }
+
+.restore-msg { flex: 1; font-weight: 500; }
+
+.restore-btn {
+    padding: 4px 13px;
+    border-radius: var(--r-xs);
+    font-size: .72rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid;
+    transition: background .1s;
+    flex-shrink: 0;
+}
+
+.restore-yes { background: var(--blue); color: #fff; border-color: var(--blue-d); }
+.restore-yes:hover { background: var(--blue-d); }
+
+.restore-no { background: transparent; color: #1e40af; border-color: #93c5fd; }
+.restore-no:hover { background: #dbeafe; }
+
+/* ════════════════════════════════════════════════════════════
+   Disclaimer banner
+════════════════════════════════════════════════════════════ */
+.disclaimer {
+    flex-shrink: 0;
+    background: #fefce8;
+    border-bottom: 1px solid #fde68a;
+    padding: 6px 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .7rem;
+    color: #78350f;
+}
+
+.disclaimer-icon { font-size: .9rem; flex-shrink: 0; }
+
 /* ════════════════════════════════════════════════════════════
    Top panel — fixed height, always visible, no scroll
 ════════════════════════════════════════════════════════════ */
@@ -662,3 +733,62 @@ body {
 }
 
 .footer-share:hover { color: var(--slate-2); }
+
+/* ════════════════════════════════════════════════════════════
+   Print / PDF export  (Ctrl+P or window.print)
+════════════════════════════════════════════════════════════ */
+@media print {
+    html, body {
+        height: auto;
+        overflow: visible;
+    }
+
+    .restore-banner,
+    .site-header,
+    .disclaimer,
+    .top-panel,
+    .site-footer,
+    .btn { display: none !important; }
+
+    .grid-area {
+        flex: none;
+        padding: 0;
+        background: #fff;
+        overflow: visible;
+    }
+
+    .grid-scroll {
+        overflow: visible;
+        box-shadow: none;
+        border-radius: 0;
+    }
+
+    .grid { width: 100%; min-height: unset; }
+
+    .row-label {
+        background: #e2e8f0 !important;
+        color: #1e293b !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .cell {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .placed {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .time-row { position: static; }
+
+    .time-row .row-label,
+    .time-cell {
+        background: #1e293b !important;
+        color: #cbd5e1 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
