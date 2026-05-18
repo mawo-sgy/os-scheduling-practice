@@ -24,6 +24,7 @@ function procColor(idx) { return PROC_COLORS[idx % PROC_COLORS.length]; }
 // ════════════════════════════════════════════════════════════
 let dragProc = null;
 let dragSrc  = null;   // source .cell element, or null when from palette
+let dragEl   = null;   // specific .placed element being dragged (for stacked remove)
 
 // ════════════════════════════════════════════════════════════
 //  Row definitions
@@ -211,6 +212,7 @@ function onTrackDrop(e, type) {
     cell.appendChild(makeMarker(dragProc, type));
     dragProc = null;
     dragSrc  = null;
+    dragEl   = null;
     saveState();
 }
 
@@ -231,6 +233,7 @@ function onPlacedDragStart(e) {
     e.stopPropagation();
     dragProc = e.currentTarget.dataset.process;
     dragSrc  = e.currentTarget.parentElement;   // the .cell
+    dragEl   = e.currentTarget;                 // the specific .placed block
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', dragProc);
     const target = e.currentTarget;
@@ -241,6 +244,7 @@ function onPlacedDragEnd(e) {
     e.currentTarget.classList.remove('dragging');
     dragProc = null;
     dragSrc  = null;
+    dragEl   = null;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -264,6 +268,12 @@ function onDragLeave(e) {
     }
 }
 
+// RQ and IOQ cells allow multiple processes to stack
+function isStackable(cell) {
+    const col = cell.dataset.col || '';
+    return col.startsWith('rq-') || col.startsWith('ioq-');
+}
+
 function onDrop(e) {
     e.preventDefault();
     const cell = e.currentTarget;
@@ -272,14 +282,29 @@ function onDrop(e) {
     if (!dragProc) return;
 
     // Same cell — no-op
-    if (dragSrc === cell) { dragProc = null; dragSrc = null; return; }
+    if (dragSrc === cell) { dragProc = null; dragSrc = null; dragEl = null; return; }
 
-    // Move: clear source cell
-    if (dragSrc) { dragSrc.innerHTML = ''; dragSrc = null; }
+    // Move: remove only the specific dragged element (not the whole source cell)
+    if (dragSrc) {
+        if (dragEl) dragEl.remove(); else dragSrc.innerHTML = '';
+        dragSrc = null;
+        dragEl  = null;
+    }
 
-    // Place in target cell (replaces any existing block)
-    cell.innerHTML = '';
-    cell.appendChild(makePlaced(dragProc));
+    if (isStackable(cell)) {
+        // Enforce 8-process limit
+        if (cell.querySelectorAll('.placed').length >= 8) {
+            showToast('Maximum 8 processes per cell.');
+            dragProc = null;
+            return;
+        }
+        // Stack: prepend so the newest block appears at the top
+        cell.prepend(makePlaced(dragProc));
+    } else {
+        // Replace: CPU and I/O Device rows hold only one process
+        cell.innerHTML = '';
+        cell.appendChild(makePlaced(dragProc));
+    }
     dragProc = null;
 
     saveState();
@@ -301,7 +326,7 @@ function makePlaced(name) {
     div.addEventListener('dragend',   onPlacedDragEnd);
     div.addEventListener('click', e => {
         e.stopPropagation();
-        div.parentElement.innerHTML = '';
+        div.remove();
         saveState();
     });
 
@@ -359,11 +384,12 @@ function applyConfig() {
         return Math.max(lo, Math.min(hi, isNaN(v) ? lo : v));
     };
 
-    // Snapshot placed blocks
+    // Snapshot placed blocks (all blocks per cell, in DOM order)
     const snapshot = [];
     document.querySelectorAll('.cell').forEach(cell => {
-        const placed = cell.querySelector('.placed');
-        if (placed) snapshot.push({ col: cell.dataset.col, t: +cell.dataset.t, process: placed.dataset.process });
+        cell.querySelectorAll('.placed').forEach(placed => {
+            snapshot.push({ col: cell.dataset.col, t: +cell.dataset.t, process: placed.dataset.process });
+        });
     });
 
     // Snapshot tracking markers
@@ -399,7 +425,7 @@ function applyConfig() {
     let lost = 0;
     snapshot.forEach(({ col, t, process }) => {
         const cell = document.querySelector(`.cell[data-col="${col}"][data-t="${t}"]`);
-        if (cell) { cell.innerHTML = ''; cell.appendChild(makePlaced(process)); }
+        if (cell) cell.appendChild(makePlaced(process));
         else lost++;
     });
     markerSnap.forEach(({ trackType, t, process }) => {
@@ -480,8 +506,10 @@ function mkDiv(cls) {
 function saveState() {
     const blocks = [];
     document.querySelectorAll('.cell').forEach(cell => {
-        const placed = cell.querySelector('.placed');
-        if (placed) blocks.push({ col: cell.dataset.col, t: cell.dataset.t, process: placed.dataset.process });
+        // Collect all placed blocks in DOM order (newest-first for stackable cells)
+        cell.querySelectorAll('.placed').forEach(p => {
+            blocks.push({ col: cell.dataset.col, t: cell.dataset.t, process: p.dataset.process });
+        });
     });
     const markers = [];
     document.querySelectorAll('.track-cell').forEach(cell => {
@@ -515,7 +543,7 @@ function restoreState(state) {
     buildGrid();
     state.blocks.forEach(({ col, t, process }) => {
         const cell = document.querySelector(`.cell[data-col="${col}"][data-t="${t}"]`);
-        if (cell) { cell.innerHTML = ''; cell.appendChild(makePlaced(process)); }
+        if (cell) cell.appendChild(makePlaced(process));
     });
     (state.markers || []).forEach(({ trackType, t, process }) => {
         const cell = document.querySelector(`.track-cell[data-track-type="${trackType}"][data-t="${t}"]`);

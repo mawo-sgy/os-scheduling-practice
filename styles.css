@@ -693,6 +693,9 @@ body {
     transition: background .1s, box-shadow .1s;
     cursor: crosshair;
     padding: 2px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 /* Alternate row tint — applied via JS class on the row */
@@ -758,8 +761,9 @@ body {
    Placed process blocks
 ════════════════════════════════════════════════════════════ */
 .placed {
-    position: absolute;
-    inset: 2px;
+    flex: 1;
+    min-height: 0;
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -773,6 +777,12 @@ body {
     overflow: hidden;
     transition: filter .1s, box-shadow .1s, opacity .14s;
 }
+
+/* Stacking: divider between blocks and flatten inner radius edges */
+.placed:not(:only-child) { border-radius: 0; }
+.placed:first-child:not(:only-child) { border-radius: var(--r-xs) var(--r-xs) 0 0; }
+.placed:last-child:not(:only-child)  { border-radius: 0 0 var(--r-xs) var(--r-xs); }
+.placed:not(:last-child) { border-bottom: 1px solid rgba(255,255,255,0.3); }
 
 /* Gloss sheen overlay */
 .placed::before {
