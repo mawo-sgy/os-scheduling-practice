@@ -75,9 +75,8 @@
     <!-- Config card -->
     <div class="tp-card cfg-card">
         <div class="tp-card-head">Configuration</div>
-        <div class="tp-card-body cfg-body">
-
-            <div class="ctrl-group">
+        <div class="config-compact">
+            <div class="config-item">
                 <div class="ctrl-label">CPUs <span class="ctrl-range">1–2</span></div>
                 <div class="spinbox">
                     <button class="spin" data-for="cfg-cpus" data-d="-1">−</button>
@@ -85,10 +84,7 @@
                     <button class="spin" data-for="cfg-cpus" data-d="1">+</button>
                 </div>
             </div>
-
-            <div class="ctrl-divider"></div>
-
-            <div class="ctrl-group">
+            <div class="config-item">
                 <div class="ctrl-label">I/O Devices <span class="ctrl-range">1–3</span></div>
                 <div class="spinbox">
                     <button class="spin" data-for="cfg-io" data-d="-1">−</button>
@@ -96,10 +92,7 @@
                     <button class="spin" data-for="cfg-io" data-d="1">+</button>
                 </div>
             </div>
-
-            <div class="ctrl-divider"></div>
-
-            <div class="ctrl-group">
+            <div class="config-item">
                 <div class="ctrl-label">Timeline</div>
                 <div class="spinbox">
                     <button class="spin spin-wide" data-for="cfg-len" data-d="-5">−5</button>
@@ -107,10 +100,7 @@
                     <button class="spin spin-wide" data-for="cfg-len" data-d="5">+5</button>
                 </div>
             </div>
-
-            <div class="ctrl-divider"></div>
-
-            <div class="ctrl-group">
+            <div class="config-item">
                 <div class="ctrl-label">RQ Rows <span class="ctrl-range">4–8</span></div>
                 <div class="spinbox">
                     <button class="spin" data-for="cfg-rq" data-d="-1">−</button>
@@ -118,10 +108,7 @@
                     <button class="spin" data-for="cfg-rq" data-d="1">+</button>
                 </div>
             </div>
-
-            <div class="ctrl-divider"></div>
-
-            <div class="ctrl-group">
+            <div class="config-item">
                 <div class="ctrl-label">IOQ Rows <span class="ctrl-range">4–8</span></div>
                 <div class="spinbox">
                     <button class="spin" data-for="cfg-ioq" data-d="-1">−</button>
@@ -129,8 +116,12 @@
                     <button class="spin" data-for="cfg-ioq" data-d="1">+</button>
                 </div>
             </div>
-
             <button id="apply-btn" class="btn btn-apply">Apply</button>
+        </div>
+        <div class="increment-row">
+            <span class="step-label">Increment:</span>
+            <label class="step-opt"><input type="radio" name="time-increment" value="1" checked> ×1</label>
+            <label class="step-opt"><input type="radio" name="time-increment" value="10"> ×10</label>
         </div>
     </div>
 

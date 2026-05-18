@@ -12,6 +12,7 @@ const cfg = {
     names:           ['P1','P2','P3','P4','P5'],
     namingStyle:     'p-style',
     customNamesInput: '',
+    timeIncrement:   1,   // 1 or 10 — multiplier for time-row labels
 };
 
 // Process colours — cycled by index so any number of names work
@@ -101,6 +102,10 @@ function buildGrid() {
         grid.appendChild(rowEl);
     });
 
+    // Tracking rows sit between content and the sticky time axis
+    grid.appendChild(makeTrackRow('arrival',    'Arrivals →'));
+    grid.appendChild(makeTrackRow('completion', 'Completions →'));
+
     // Time axis — sticky bottom (appended last)
     grid.appendChild(makeTimeRow());
 
@@ -155,11 +160,58 @@ function makeTimeRow() {
 
     for (let t = 0; t < cfg.len; t++) {
         const tc = mkDiv(`time-cell${t > 0 && t % 5 === 0 ? ' tick' : ''}`);
-        tc.textContent = t;
+        tc.textContent = t * cfg.timeIncrement;
         row.appendChild(tc);
     }
 
     return row;
+}
+
+// ── Arrival / Completion tracking rows ──────────────────────
+function makeTrackRow(type, label) {
+    const row = mkDiv(`grid-row track-row track-${type}`);
+
+    const lbl = mkDiv('row-label track-label');
+    lbl.textContent = label;
+    row.appendChild(lbl);
+
+    for (let t = 0; t < cfg.len; t++) {
+        const td = mkDiv(`track-cell${t > 0 && t % 5 === 0 ? ' tick' : ''}`);
+        td.dataset.trackType = type;
+        td.dataset.t = t;
+        td.addEventListener('dragover',  onDragOver);
+        td.addEventListener('dragenter', onDragEnter);
+        td.addEventListener('dragleave', onDragLeave);
+        td.addEventListener('drop', e => onTrackDrop(e, type));
+        row.appendChild(td);
+    }
+    return row;
+}
+
+function makeMarker(name, type) {
+    const idx = cfg.names.indexOf(name);
+    const div = mkDiv('marker');
+    div.style.background = procColor(idx >= 0 ? idx : 0);
+    div.dataset.process    = name;
+    div.dataset.markerType = type;
+    div.title = 'Click to remove';
+    const icon = type === 'arrival' ? '↓' : '✓';
+    div.innerHTML = `<span class="mk-icon">${icon}</span><span class="mk-name">${name}</span>`;
+    div.addEventListener('click', e => { e.stopPropagation(); div.remove(); saveState(); });
+    return div;
+}
+
+function onTrackDrop(e, type) {
+    e.preventDefault();
+    const cell = e.currentTarget;
+    cell.classList.remove('drag-over');
+    if (!dragProc) return;
+    // Always append — tracking rows allow multiple markers per cell
+    // and never clear the source placed block
+    cell.appendChild(makeMarker(dragProc, type));
+    dragProc = null;
+    dragSrc  = null;
+    saveState();
 }
 
 // ════════════════════════════════════════════════════════════
@@ -307,16 +359,25 @@ function applyConfig() {
         return Math.max(lo, Math.min(hi, isNaN(v) ? lo : v));
     };
 
-    // Snapshot all placed blocks before the grid is wiped
+    // Snapshot placed blocks
     const snapshot = [];
     document.querySelectorAll('.cell').forEach(cell => {
         const placed = cell.querySelector('.placed');
         if (placed) snapshot.push({ col: cell.dataset.col, t: +cell.dataset.t, process: placed.dataset.process });
     });
 
+    // Snapshot tracking markers
+    const markerSnap = [];
+    document.querySelectorAll('.track-cell').forEach(cell => {
+        cell.querySelectorAll('.marker').forEach(m => {
+            markerSnap.push({ trackType: cell.dataset.trackType, t: +cell.dataset.t, process: m.dataset.process });
+        });
+    });
+
     cfg.names            = naming.names;
     cfg.namingStyle      = naming.style;
     cfg.customNamesInput = naming.raw;
+    cfg.timeIncrement    = parseInt(document.querySelector('input[name="time-increment"]:checked')?.value || '1', 10);
 
     cfg.cpus = clamp('cfg-cpus', 1, 2);
     cfg.io   = clamp('cfg-io',   1, 3);
@@ -334,11 +395,16 @@ function applyConfig() {
     rebuildPalette();
     buildGrid();
 
-    // Restore blocks that still fit; count those that don't
+    // Restore blocks and markers that still fit within new bounds
     let lost = 0;
     snapshot.forEach(({ col, t, process }) => {
         const cell = document.querySelector(`.cell[data-col="${col}"][data-t="${t}"]`);
         if (cell) { cell.innerHTML = ''; cell.appendChild(makePlaced(process)); }
+        else lost++;
+    });
+    markerSnap.forEach(({ trackType, t, process }) => {
+        const cell = document.querySelector(`.track-cell[data-track-type="${trackType}"][data-t="${t}"]`);
+        if (cell) cell.appendChild(makeMarker(process, trackType));
         else lost++;
     });
 
@@ -361,14 +427,16 @@ function showToast(msg) {
 
 function resetGrid() {
     document.querySelectorAll('.cell').forEach(c => (c.innerHTML = ''));
+    document.querySelectorAll('.track-cell').forEach(c => (c.innerHTML = ''));
     localStorage.removeItem('osScheduleState');
 }
 
 function updateMeta() {
     const el = document.querySelector('.site-tagline');
     if (!el) return;
+    const maxT = (cfg.len - 1) * (cfg.timeIncrement || 1);
     el.textContent =
-        `t = 0 … ${cfg.len - 1}` +
+        `t = 0 … ${maxT}${cfg.timeIncrement > 1 ? ` (×${cfg.timeIncrement})` : ''}` +
         `  ·  ${cfg.cpus} CPU` +
         `  ·  ${cfg.io} I/O device${cfg.io > 1 ? 's' : ''}` +
         `  ·  ${cfg.rq} RQ rows  ·  ${cfg.ioq} IOQ rows`;
@@ -413,11 +481,15 @@ function saveState() {
     const blocks = [];
     document.querySelectorAll('.cell').forEach(cell => {
         const placed = cell.querySelector('.placed');
-        if (placed) {
-            blocks.push({ col: cell.dataset.col, t: cell.dataset.t, process: placed.dataset.process });
-        }
+        if (placed) blocks.push({ col: cell.dataset.col, t: cell.dataset.t, process: placed.dataset.process });
     });
-    localStorage.setItem('osScheduleState', JSON.stringify({ cfg: { ...cfg }, blocks }));
+    const markers = [];
+    document.querySelectorAll('.track-cell').forEach(cell => {
+        cell.querySelectorAll('.marker').forEach(m => {
+            markers.push({ trackType: cell.dataset.trackType, t: +cell.dataset.t, process: m.dataset.process });
+        });
+    });
+    localStorage.setItem('osScheduleState', JSON.stringify({ cfg: { ...cfg }, blocks, markers }));
 }
 
 function restoreState(state) {
@@ -431,6 +503,10 @@ function restoreState(state) {
     // Restore naming UI
     const radio = document.querySelector(`input[name="naming-style"][value="${cfg.namingStyle || 'p-style'}"]`);
     if (radio) radio.checked = true;
+
+    // Restore time-increment radio
+    const incrRadio = document.querySelector(`input[name="time-increment"][value="${cfg.timeIncrement || 1}"]`);
+    if (incrRadio) incrRadio.checked = true;
     const customInp = document.getElementById('custom-names');
     customInp.value    = cfg.customNamesInput || '';
     customInp.disabled = cfg.namingStyle !== 'custom';
@@ -440,6 +516,10 @@ function restoreState(state) {
     state.blocks.forEach(({ col, t, process }) => {
         const cell = document.querySelector(`.cell[data-col="${col}"][data-t="${t}"]`);
         if (cell) { cell.innerHTML = ''; cell.appendChild(makePlaced(process)); }
+    });
+    (state.markers || []).forEach(({ trackType, t, process }) => {
+        const cell = document.querySelector(`.track-cell[data-track-type="${trackType}"][data-t="${t}"]`);
+        if (cell) cell.appendChild(makeMarker(process, trackType));
     });
 }
 
